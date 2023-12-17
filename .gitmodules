@@ -1,0 +1,3 @@
+[submodule "pywhispercpp"]
+	path = pywhispercpp
+	url = git@github.com:aarnphm/whispercpp.git
