@@ -87,7 +87,7 @@ def process_merged_tokens(firmware_address, tokens, swear_words):
         word = token.lower().strip()
         if word in swear_words:
             print("!" * 30, f"swear word detected (p={p})")
-            send_word(firmware_address, word)
+            send_word(firmware_address, bytes(word, 'utf-8'))
 
 
 def _store_transcript_handler(
