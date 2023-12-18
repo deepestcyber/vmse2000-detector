@@ -1,5 +1,11 @@
 # Setup
 
+## Contents
+
+- first prototype script
+- detector script (based upon first prototype)
+- direct dependencies (pinned; whispercpp python bindings)
+
 ## Install python whispercpp bindings
 
     poetry install
