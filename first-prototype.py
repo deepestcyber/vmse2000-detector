@@ -4,7 +4,7 @@ from termcolor import colored
 
 import whispercpp
 from whispercpp import Whisper, api, audio
-from typing import Any, List
+from typing import Any, List, Optional
 
 
 transcript: List[str] = []
@@ -13,7 +13,7 @@ def stream_transcribe(
     whisper: Whisper,
     swear_words: list[str],
     device_id: int = 0,
-    sample_rate: int | None = None,
+    sample_rate: Optional[int] = None,
     **kwargs: Any,
 ) -> list[str]:
     """Streaming transcription from microphone. Note that this function is blocking.
@@ -150,6 +150,7 @@ if __name__ == "__main__":
     parser.add_argument('--length', type=int, default=8000)
     parser.add_argument('--audio-ctx', type=int, default=512)
     parser.add_argument('--language', type=str, default='de')
+    parser.add_argument('--model', type=str, default='pywhispercpp/extern/whispercpp/models/ggml-base.bin')
 
     args = parser.parse_args()
 
@@ -174,9 +175,7 @@ if __name__ == "__main__":
     #whisper = Whisper.from_pretrained(
     #    'pywhispercpp/extern/whispercpp/'
     #    'models/ggml-medium-q5_0.bin')
-    whisper = Whisper.from_pretrained(
-        '/home/nemo/Code/deepcyber/vmse2000/v3/whisper.cpp/models/ggml-base.bin'
-    )
+    whisper = Whisper.from_pretrained(args.model)
 
     print(whisper.context.sys_info())
 
