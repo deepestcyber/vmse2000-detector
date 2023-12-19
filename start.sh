@@ -4,7 +4,7 @@ source openvino/l_openvino_toolkit_debian9_2023.2.0.13089.cfd42bd2cb0_arm64/setu
 
 dev=0
 
-if [ "$#" -gt 1 ]; then
+if [ "$#" -gt 0 ]; then
     dev="$1"
 fi
 
