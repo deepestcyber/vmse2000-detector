@@ -130,7 +130,7 @@ def _store_transcript_handler(
                 continue
 
             # this token is mergeable, collect it for merging
-            if token[0] not in string.whitespace + string.punctuation:
+            if not token or token[0] not in string.whitespace + string.punctuation:
                 merge_token[0].append(token)
                 merge_token[1].append(token_data.p)
                 continue
@@ -188,6 +188,7 @@ if __name__ == "__main__":
         "scheiße",
         "schlampe",
         "shit",
+        "spack",
         "spacken",
         "wichser",
     ]
