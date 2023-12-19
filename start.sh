@@ -1,6 +1,12 @@
 #!/bin/bash
 
+# save the cli arguments as the execution of the source statement
+# clears the parameters.
+args="$@"
+readonly args
+
 source openvino/l_openvino_toolkit_debian9_2023.2.0.13089.cfd42bd2cb0_arm64/setupvars.sh
+set -- "$args"
 
 dev=0
 
