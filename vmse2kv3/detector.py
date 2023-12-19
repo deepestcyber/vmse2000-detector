@@ -1,10 +1,10 @@
+import string
+from typing import Any, List, Optional
+
 import numpy as np
-
 from termcolor import colored
-
 import whispercpp
 from whispercpp import Whisper, api, audio
-from typing import Any, List, Optional
 
 
 transcript: List[str] = []
@@ -84,7 +84,7 @@ def process_merged_tokens(firmware_address, tokens, swear_words):
     print()
 
     for token, p in tokens:
-        word = token.lower().strip()
+        word = token.lower().strip(string.punctuation + string.whitespace)
         if word in swear_words:
             print("!" * 30, f"swear word detected (p={p})")
             send_word(firmware_address, bytes(word, 'utf-8'))
@@ -93,8 +93,6 @@ def process_merged_tokens(firmware_address, tokens, swear_words):
 def _store_transcript_handler(
     ctx: api.Context, n_new: int, kwargs,
 ):
-    import string
-
     swear_words: list[str] = kwargs['swear_words']
     firmware_address: tuple[str,str] = kwargs['firmware_address']
     segment = ctx.full_n_segments() - n_new
@@ -173,19 +171,25 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     swear_words = [
-        "fuck",
         "ass",
-        "shit",
+        "bitch",
+        "bratze",
         "eleven",
-        "scheiß",
-        "scheiße",
-        "hölle",
         "fick",
+        "fuck",
+        "hölle",
+        "hure",
         "kack",
         "kacke",
         "kackscheiß",
-        "hure",
-        "bratze",
+        "kackbratze",
+        "nutte",
+        "scheiß",
+        "scheiße",
+        "schlampe",
+        "shit",
+        "spacken",
+        "wichser",
     ]
 
     print(whispercpp.utils.available_audio_devices())
