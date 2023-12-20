@@ -1,3 +1,4 @@
+from functools import lru_cache
 import string
 from typing import Any, List, Optional
 
@@ -69,7 +70,7 @@ def tokenize(text: str):
     return tokenizer.encode(text)
 
 
-from functools import lru_cache
+
 
 @lru_cache
 def get_word_tokens(words):
@@ -90,11 +91,17 @@ active_words = {}
 
 
 def _logits_callback(ctx: api.Context, n_tokens: int, logits: np.array, kwargs):
+    # invoked on every new 'segment' (i.e. an inference run on a audio snippet).
+    # called for every predicted token (n_tokens is the number of tokens that
+    # were already predicted before, so n_tokens == 0 signifies the first call
+    # in the decoding process).
+
     global active_words
 
     swear_words = kwargs.get('swear_words')
-    top_k = 30
-    top_token_ids = logits.argsort()[-top_k:]
+    top_k = 100
+    sorted_tokens = logits.argsort()
+    top_token_ids = sorted_tokens[-top_k:]
 
     if n_tokens == 0:
         active_words = {}
@@ -103,24 +110,96 @@ def _logits_callback(ctx: api.Context, n_tokens: int, logits: np.array, kwargs):
     logsumexp = np.exp(logits - logits.max()).sum()
     logsumexp = np.log(logsumexp) + logits.max()
 
+    all_probas = np.exp(logits - logsumexp)
+    min_p = all_probas.min()
+    max_p = all_probas.max()
+    p99_p = np.median(all_probas)
+
+    """
+    we want to find the conditional probability of words in a list
+    *if* they are in a certain confidence threshold (defined by a quantile (top_k)).
+
+    - what happens if we think we already found a word beginning but find a
+      beginning token that matches the word but with higher probability?
+      -> greedy or non-greedy (i.e. reset)?
+      => let's go with greedy for now as it is easier to implement
+         (i.e. stick with what we already found)
+
+    - what happens if we don't gather all tokens of a word (left-overs)?
+      => word should be discarded
+
+    - what happens if an intermediate token is not in the top-k list?
+      -> discard word, discount probability or take probability?
+      -> discard would be 'more correct', discounting would allow for one-off
+         errors to be corrected but more difficult to tune. taking the
+         probability anyway would disable the top-k filtering which would
+         make the whole thing harder to tune.
+      => let's go with discard for now
+
+    - how to guarantee token continuity? i.e. enforcing that the tokens of
+      a word need to be found directly one after another, not distributed
+      over the whole sequence.
+      => by deciding to drop tokens that are not in the top-k token list
+         we solve this problem implicitly as either the word is active
+         and the token is present or the token is not present, then the word
+         is not active anymore.
+
+    - conditional probabilities need to be normalized to length
+      => after gathering the active words we divide the gathered conditional
+         probabilities by the number of tokens.
+
+    - we might need a 'probability floor' to get a sense how high the
+      conditional probability is in relation to what is possible at most/worst
+      => track max/min p(x_{t} | x_{t-1,...,0})
+      -> this does not work as the probabilities are way to low to be taken
+         over the whole sequence.
+      => instead we may track the min/max probas at time of capturing a token.
+         we also may need to skip special tokens.
+    """
+
     for word, tokens in get_word_tokens(swear_words).items():
         if word in active_words:
-            idx = active_words[word]['idx']
-            # only collect proba if there are still tokens missing
-            if idx < len(tokens):
-                if tokens[idx] in top_token_ids:
-                    log_proba = logits[tokens[idx]] - logsumexp
-                    active_words[word]['p'] *= np.exp(log_proba)
+            # in non-greedy sampling we would check if the token matches the
+            # beginning token with higher probability. we don't do non-greedy.
+            idx = active_words[word]['idx'] + 1
+
+            # only collect proba if there are still tokens missing, if we
+            # collected all tokens of a word, we're done.
+            if idx >= len(tokens):
+                continue
+
+            if tokens[idx] in top_token_ids:
+                log_proba = logits[tokens[idx]] - logsumexp
+                active_words[word]['p'] *= np.exp(log_proba)
                 active_words[word]['idx'] += 1
-        else:
-            if tokens[0] in top_token_ids:
-                # p is the conditional probability discounted by the amount
-                #   of tokens - this is done to penalize words that are
-                #   only found partially (e.g. the first 2 of 5 tokens)
-                # idx is the token index of the current word that was
-                #     last processed
-                log_proba = logits[tokens[0]] - logsumexp
-                active_words[word] = {'p': np.exp(log_proba), 'idx': 0, 'len': len(tokens)}
+                active_words[word]['min_p'] *= min_p
+                active_words[word]['max_p'] *= max_p
+                active_words[word]['p99_p'] *= p99_p
+                active_words[word]['pos'].append(n_tokens)
+                continue
+            else:
+                # the token did not make it into the top-k tokens, thus we
+                # cannot correctly compute the conditional probability of
+                # the word and we decided NOT to discount or to take the
+                # probability.
+                k = np.where(sorted_tokens == tokens[idx])[0][0]
+                print(f'dropping word {word}, idx: {idx}, k: {k}')
+                del active_words[word]
+
+                # pass through since we might re-activate with this token now.
+
+        if tokens[0] in top_token_ids:
+            # p is the conditional probability discounted by the amount
+            #   of tokens - this is done to penalize words that are
+            #   only found partially (e.g. the first 2 of 5 tokens).
+            #   to get the correct proba, you need to multiply by 'idx'+1
+            # idx is the token index of the current word that was
+            #   last processed
+            log_proba = logits[tokens[0]] - logsumexp
+            active_words[word] = {'p': np.exp(log_proba), 'idx': 0, 'len': len(tokens),
+                    'p99_p': p99_p, 'min_p': min_p, 'max_p': max_p,
+                    'pos': [n_tokens],
+                    }
 
 
 def token_to_str(ctx: api.Context, tid: int) -> str:
@@ -143,13 +222,18 @@ def send_word(address, word):
     sock.sendto(word, address)
 
 
+@lru_cache
+def normalize_word(w: str) -> str:
+    return w.lower().strip(string.punctuation + string.whitespace)
+
+
 def process_merged_tokens(firmware_address, tokens, swear_words):
     for token, p in tokens:
         print(f"'{colored_token(token, p)}'", end='')
     print()
 
     for token, p in tokens:
-        word = token.lower().strip(string.punctuation + string.whitespace)
+        word = normalize_word(token)
         if word in swear_words:
             print("!" * 30, f"swear word detected (p={p})")
             send_word(firmware_address, bytes(word, 'utf-8'))
@@ -165,7 +249,31 @@ def _store_transcript_handler(
     # collected tokens over all segments
     all_tokens = []
 
-    print(sorted(active_words.items(), key=lambda x: -x[1]['p']))
+    for word in active_words:
+        active_words[word]['p'] /= active_words[word]['len']
+        active_words[word]['p99_p'] /= active_words[word]['len']
+    print('normalized:', sorted(active_words.items(), key=lambda x: -x[1]['p']))
+
+    for word in active_words:
+        active_words[word]['p'] /= active_words[word]['max_p']
+    print('    scaled:', sorted(active_words.items(), key=lambda x: -x[1]['p']))
+
+    # join all similar words into one proba
+    comb_p = {}
+    for word, data in active_words.items():
+        w = normalize_word(word)
+        if w not in comb_p:
+            comb_p[w] = {'p': 0, 'count': 0}
+        comb_p[w]['p'] += data['p']
+        comb_p[w]['count'] += 1
+    comb_p = {w: p['p'] / p['count'] for w, p in comb_p.items()}
+
+    print('  combined:', sorted(comb_p.items(), key=lambda x: -x[1]))
+
+    print('    chosen:', [
+        (w,p) for w,p in sorted(comb_p.items(), key=lambda x: -x[1])
+        if p >= 0.3
+    ])
 
     # decoder segments contain a bunch of tokens
     for segment in range(ctx.full_n_segments()):
@@ -217,8 +325,6 @@ def _store_transcript_handler(
         # final processing of tokens
         process_merged_tokens(firmware_address, all_tokens, swear_words)
 
-    top_idcs = np.array(word_probas).argsort()[-3:]
-    print("from probas: ", top_idcs, [f'{word_words[i]}:{word_probas[i]*100:.3f}' for i in top_idcs])
 
 
 if __name__ == "__main__":
