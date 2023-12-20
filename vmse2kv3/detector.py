@@ -50,12 +50,77 @@ def stream_transcribe(
         ),
     )
 
+    whisper.params.on_new_logits(
+        _logits_callback,
+        dict(swear_words=swear_words),
+    )
+
     try:
         ac.stream_transcribe(whisper.context, whisper.params, **kwargs)
     except KeyboardInterrupt:
         # handled from C++
         pass
     return transcript
+
+
+def tokenize(text: str):
+    from vmse2kv3.openai_tokenizer import get_tokenizer
+    tokenizer = get_tokenizer(True)
+    return tokenizer.encode(text)
+
+
+from functools import lru_cache
+
+@lru_cache
+def get_word_tokens(words):
+    def augment_word(w):
+        yield ' ' + w
+        yield ' ' + w[0].upper() + w[1:]
+        yield w[0].upper() + w[1:]
+
+    return {
+        word: tokenize(word)
+        for raw_word in words
+        for word in augment_word(raw_word)
+    }
+
+
+
+active_words = {}
+
+
+def _logits_callback(ctx: api.Context, n_tokens: int, logits: np.array, kwargs):
+    global active_words
+
+    swear_words = kwargs.get('swear_words')
+    top_k = 30
+    top_token_ids = logits.argsort()[-top_k:]
+
+    if n_tokens == 0:
+        active_words = {}
+
+    logsumexp = np.ma.masked_invalid(logits)
+    logsumexp = np.exp(logits - logits.max()).sum()
+    logsumexp = np.log(logsumexp) + logits.max()
+
+    for word, tokens in get_word_tokens(swear_words).items():
+        if word in active_words:
+            idx = active_words[word]['idx']
+            # only collect proba if there are still tokens missing
+            if idx < len(tokens):
+                if tokens[idx] in top_token_ids:
+                    log_proba = logits[tokens[idx]] - logsumexp
+                    active_words[word]['p'] *= np.exp(log_proba)
+                active_words[word]['idx'] += 1
+        else:
+            if tokens[0] in top_token_ids:
+                # p is the conditional probability discounted by the amount
+                #   of tokens - this is done to penalize words that are
+                #   only found partially (e.g. the first 2 of 5 tokens)
+                # idx is the token index of the current word that was
+                #     last processed
+                log_proba = logits[tokens[0]] - logsumexp
+                active_words[word] = {'p': np.exp(log_proba), 'idx': 0, 'len': len(tokens)}
 
 
 def token_to_str(ctx: api.Context, tid: int) -> str:
@@ -100,6 +165,8 @@ def _store_transcript_handler(
     # collected tokens over all segments
     all_tokens = []
 
+    print(sorted(active_words.items(), key=lambda x: -x[1]['p']))
+
     # decoder segments contain a bunch of tokens
     for segment in range(ctx.full_n_segments()):
         num_tokens = ctx.full_n_tokens(segment)
@@ -117,7 +184,7 @@ def _store_transcript_handler(
             token_data = ctx.full_get_token_data(segment, token_idx)
             token = token_to_str(ctx, token_data.id)
 
-            print("debug:", colored_token("'"+token+"'", token_data.p))
+            print("debug:", colored_token("'"+token+"'", token_data.p), token_data.id)
 
             # we attempt to merge tokens that are likely to be part of a
             # larger word. the vocabulary seems to be ordered in such a way
@@ -149,6 +216,9 @@ def _store_transcript_handler(
 
         # final processing of tokens
         process_merged_tokens(firmware_address, all_tokens, swear_words)
+
+    top_idcs = np.array(word_probas).argsort()[-3:]
+    print("from probas: ", top_idcs, [f'{word_words[i]}:{word_probas[i]*100:.3f}' for i in top_idcs])
 
 
 if __name__ == "__main__":
