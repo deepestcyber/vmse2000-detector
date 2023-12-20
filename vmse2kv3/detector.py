@@ -170,8 +170,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    swear_words = [
+    swear_words = (
         "ass",
+        "arsch",
         "bitch",
         "bratze",
         "eleven",
@@ -184,6 +185,8 @@ if __name__ == "__main__":
         "kackscheiß",
         "kackbratze",
         "nutte",
+        "titten",
+        "penis",
         "scheiß",
         "scheiße",
         "schlampe",
@@ -191,7 +194,7 @@ if __name__ == "__main__":
         "spack",
         "spacken",
         "wichser",
-    ]
+    )
 
     print(whispercpp.utils.available_audio_devices())
 
