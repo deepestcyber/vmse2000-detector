@@ -70,8 +70,6 @@ def tokenize(text: str):
     return tokenizer.encode(text)
 
 
-
-
 @lru_cache
 def get_word_tokens(words):
     def augment_word(w):
@@ -124,6 +122,10 @@ def _logits_callback(ctx: api.Context, n_tokens: int, logits: np.array, kwargs):
       -> greedy or non-greedy (i.e. reset)?
       => let's go with greedy for now as it is easier to implement
          (i.e. stick with what we already found)
+      -> it happens quite often that the first token matched is not the
+         best one
+      => we should at least implement it so that we take the
+         most probable start and, with it, overriding active words.
 
     - what happens if we don't gather all tokens of a word (left-overs)?
       => word should be discarded
@@ -157,11 +159,31 @@ def _logits_callback(ctx: api.Context, n_tokens: int, logits: np.array, kwargs):
          we also may need to skip special tokens.
     """
 
+    def activate_word(word, p):
+        active_words[word] = {
+            'p': p,
+            'idx': 0,
+            'len': len(tokens),
+            'p99_p': p99_p,
+            'min_p': min_p,
+            'max_p': max_p,
+            'pos': [n_tokens],
+        }
+
     for word, tokens in get_word_tokens(swear_words).items():
+
         if word in active_words:
             # in non-greedy sampling we would check if the token matches the
             # beginning token with higher probability. we don't do non-greedy.
             idx = active_words[word]['idx'] + 1
+
+            t0_proba = np.exp(logits[tokens[0]] - logsumexp)
+
+            if (tokens[0] in top_token_ids and
+                t0_proba >= active_words[word]['p']):
+                print(f're-activating {word}; found better')
+                activate_word(word, t0_proba)
+                continue
 
             # only collect proba if there are still tokens missing, if we
             # collected all tokens of a word, we're done.
@@ -196,10 +218,7 @@ def _logits_callback(ctx: api.Context, n_tokens: int, logits: np.array, kwargs):
             # idx is the token index of the current word that was
             #   last processed
             log_proba = logits[tokens[0]] - logsumexp
-            active_words[word] = {'p': np.exp(log_proba), 'idx': 0, 'len': len(tokens),
-                    'p99_p': p99_p, 'min_p': min_p, 'max_p': max_p,
-                    'pos': [n_tokens],
-                    }
+            activate_word(word, np.exp(log_proba))
 
 
 def token_to_str(ctx: api.Context, tid: int) -> str:
