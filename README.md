@@ -1,5 +1,19 @@
 # Setup
 
+## Known issues
+
+- some words like 'Nutte' and 'Schlampe' are not well processed
+- having a virtual microphone and playing back recorded audios (via
+  the same microphone than live streaming) seems to improve recognition.
+  Maybe the recorded samples / the virtual mic have a higher sample rate?
+- it may be worthwhile to, instead of using a fixed `k` to use a small
+  value at the beginning (~100) and then get broader and broader so that
+  we don't drop candidates too quickly.
+- more methodical testing is needed
+  * a few samples with good quality and known contents are needed
+    (clean + unclean)
+  * small benchmark script would help to run tests automatically
+
 ## Contents
 
 - first prototype script

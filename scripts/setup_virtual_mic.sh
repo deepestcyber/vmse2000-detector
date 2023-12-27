@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# After running this setup script you can redirect audio to the
+# virtual microphone for example by running something like
+#
+#     PULSE_SINK=VirtMicSource mpv foo.wav
+
 
 pactl load-module module-null-sink sink_name=VirtMicSource sink_properties=device.description="VirtMicSource"
 pactl load-module module-virtual-source source_name=VirtualMic master=VirtMicSource.monitor
