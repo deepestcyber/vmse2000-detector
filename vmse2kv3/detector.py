@@ -1,3 +1,4 @@
+import sys
 import string
 from typing import Any, List, Optional
 
@@ -156,6 +157,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=int, default=2)
+    parser.add_argument('--list-devices', action='store_true')
     parser.add_argument('--step', type=int, default=4000)
     parser.add_argument('--length', type=int, default=8000)
     parser.add_argument('--audio-ctx', type=int, default=512)
@@ -261,6 +263,9 @@ if __name__ == "__main__":
     )
 
     print(whispercpp.utils.available_audio_devices())
+
+    if args.list_devices:
+        sys.exit(0)
 
     whisper = Whisper.from_pretrained(args.model)
     print(whisper.context.sys_info())
