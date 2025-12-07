@@ -3,9 +3,11 @@
 ## Known issues
 
 - some words like 'Nutte' and 'Schlampe' are not well processed
+    **needs re-evaluation**
 - having a virtual microphone and playing back recorded audios (via
   the same microphone than live streaming) seems to improve recognition.
   Maybe the recorded samples / the virtual mic have a higher sample rate?
+    **needs re-evaluation**
 - it may be worthwhile to, instead of using a fixed `k` to use a small
   value at the beginning (~100) and then get broader and broader so that
   we don't drop candidates too quickly.
@@ -16,143 +18,45 @@
 
 ## Contents
 
-- first prototype script
-- detector script (based upon first prototype)
+- detector v1 script (based on python whisper.cpp from 2023 using bazel & hacks)
+- detector v2 script based on maintained pywhispercpp
 - direct dependencies (pinned; whispercpp python bindings)
 
-## Install python whispercpp bindings
+## Installation
 
-    poetry install
-    poetry shell
+Setup venv, install requirements and build whisper.cpp python bindings:
+
+    python -m venv <envdir>
+    source activate <envdir>/bin/activate
+
+    pip install .
 
     # initialize pywhispercpp repo
-    cd pywhispercpp
-    git submodule update --init --recursive
+    (cd pywhispercpp; git submodule update --init --recursive)
 
-this possibly fails with the message
+    pip install ./pywhispercpp
 
-> fatal: Fetched in submodule path 'whispercpp/bindings/ios', but it did not contain c9d5095f0c64455b201f1cd0b547efcf093ee7c3. Direct fetching of that commit failed.
+**Important**: If you want fast whisper.cpp using OpenVINO (you do!) then
+we need to do extra steps. If you don't want that, you can go to the next
+section.
 
-in that case simply remove the bindings from that repo by running
+### Installing pywhispercpp + OpenVINO
 
-    cd extern/whisper.cpp
-    git rm bindings/ios
-    cd ../..
-    git submodule update --init --recursive
-
-continue installation
-
-    sudo apt install libsdl2-mixer-dev
-    ./tools/bazel build //:whispercpp_wheel
-
-the wheel can then be installed
-
-    cd ..
-    poetry run pip install pywhispercpp/bazel-bin/whispercpp-0.0.17-cp310-cp310-manylinux2014_x86_64.whl
-
-if installing on an ARM64 architecture the path will be, of course, different, e.g.:
-
-    pywhispercpp/bazel-bin/whispercpp-0.0.17-cp310-cp310-manylinux2014_aarch64.whl
-
-The runtime is now safe.
-You can now proceed downloading the model.
+TODO take from raspi
 
 ## Downloading the model
 
-This project uses the whisper.cpp submodule provided by the python wrapper
-as root for all things whisper - including the models.
-
-For the base model you can go to `pywhispercpp/extern/whispercpp/models/`
-and run the download script, e.g.
+For the model you can go to `pywhispercpp/whispercpp/models/` and run the
+download script, e.g.
 
 ```bash
-cd pywhispercpp/extern/whispercpp/models/
-./download-ggml-model.sh base
+pywhispercpp/whisper.cpp/models/download-ggml-model.sh base
 ```
 
+The "base" model is recommended for a Raspberry Pi 5.
 
-### Notes on fixing python version
-
-Normally the repository would include a `.python-version` file that is
-telling poetry (and pyenv) to use a specific python version. Sadly though
-this is not possible with bazel or at least I haven't found a way.
-Below are the things I found, it builds but the binary is still built for
-3.9 instead of 3.10. So I decided to use whatever bazel finds on the system
-(3.9 on raspbian). Maybe it is possible doing this when the poetry env
-is activated, that's the one thing I didn't try.
-
-#### How to (not) use pyenv with bazel
-
-Note that if bazel is building `py39` images (even though the python version
-is set via pyenv/`.python-version` file to 3.10) it may be that bazel uses
-the system python instead. check, e.g., via `sh -lc 'python --version'`.
-If it does, activate pyenv in your `~/.profile` file so that your `/bin/sh`
-also uses pyenv.
-
-If that does not help, well, pull your sleeves up and get ready to mess
-with bazel. Basically: add a new python toolchain for 3.10 (using the fact
-that a pyenv python is available in PATH under `python3.10`). Use the following
-diff and the following command:
-
-    ln -s `which python3.10` python3.10
-
-diff:
-
-```diff
-diff --git a/BUILD.bazel b/BUILD.bazel
-index 3dec535..e7f585d 100644
---- a/BUILD.bazel
-+++ b/BUILD.bazel
-@@ -7,9 +7,32 @@ load("@bazel_skylib//lib:selects.bzl", "selects")
- load("@rules_python//python:packaging.bzl", "py_wheel")
- load("@com_github_bentoml_plugins//rules/py:packaging.bzl", "py_package")
- load("@python_abi//:abi.bzl", "python_abi")
-+load("@bazel_tools//tools/python:toolchain.bzl", "py_runtime_pair")
-
- package(default_visibility = ["//visibility:public"])
-
-+
-+py_runtime(
-+    name = "python-pyenv",
-+    interpreter = "python3.10",
-+    python_version = "PY3",
-+)
-+
-+
-+py_runtime_pair(
-+    name = "python-pyenv-runtime-pair",
-+    py2_runtime = None,
-+    py3_runtime = ":python-pyenv",
-+)
-+
-+toolchain(
-+    name = "python-pyenv-toolchain",
-+    toolchain = ":python-pyenv-runtime-pair",
-+    toolchain_type = "@bazel_tools//tools/python:toolchain_type",
-+)
-+
-+
-+
- filegroup(
-     name = "pyproject",
-     srcs = ["pyproject.toml"],
-```
-
-now run the build like this:
-
-    ./tools/bazel build --extra_toolchains=//:python-pyenv-toolchain //:whispercpp_wheel
 
 ### Optimizations
-
-#### Compile flags
-
-The bazel run compiles all the binary stuff which only contains optimizations
-for `x86_64` (ssl/avx2) and not for `aarm64`. We can change this by
-modifying the `BUILD.bazel` file.
-
-Relevant compile flags are `-march=native -mcpu=native -mtune=native`.
-Note that we don't explicitly add NEON since that is included in -O3 for
-aarch64 anyway.
 
 #### OpenVINO
 
