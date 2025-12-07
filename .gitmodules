@@ -1,3 +1,3 @@
 [submodule "pywhispercpp"]
 	path = pywhispercpp
-	url = git@github.com:githubnemo/whispercpp.git
+	url = git@github.com:githubnemo/pywhispercpp.git
