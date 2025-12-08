@@ -156,6 +156,11 @@ cp ggml-base.bin ggml-base-encoder-openvino* models/base-ctx768
 whisper-cli --audio-ctx 768 -m ./models/base-ctx768/ggml-base.bin
 ```
 
+More invasive optimizations would entail, for example, changing
+whisper.cpp's behavior regarding decoder loops: the threshold for
+detecting loops is quite high at the moment, we could reduce that but
+that would entail recompilation.
+
 ## Debugging
 
 In case you want to debug whisper.cpp through `pywhispercpp` you have to
