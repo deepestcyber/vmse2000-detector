@@ -31,7 +31,7 @@ Setup venv, install requirements and build whisper.cpp python bindings:
     python -m venv <envdir>
     source activate <envdir>/bin/activate
 
-    pip install .
+    pip install -r requirements.txt
 
     # initialize pywhispercpp repo
     (cd pywhispercpp; git submodule update --init --recursive)
