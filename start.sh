@@ -6,6 +6,8 @@ if [ "$#" -gt 0 ]; then
     dev="$1"
 fi
 
-poetry run python vmse2kv3/detectorv2.py \
+source ~/envs/vmse/bin/activate
+python vmse2kv3/detector_v2.py \
         --input-device "$dev" \
         --model models/ggml-base.bin \
+        vmse2kv3/assets/swear_words.txt
