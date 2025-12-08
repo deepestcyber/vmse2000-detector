@@ -130,6 +130,23 @@ pywhispercpp/whisper.cpp/models/download-ggml-model.sh base
 The "base" model is recommended for a Raspberry Pi 5.
 
 
+## Debugging
+
+In case you want to debug whisper.cpp through `pywhispercpp` you have to
+rebuild the package. There is no cmake flag (as far as I know) that
+enables debugging so you have to modify `pywhispercpp/whisper.cpp/whisper.cpp`
+and enable `#define WHISPER_DEBUG 1`.
+
+After that you have to reinstall the package:
+
+```
+source openvino/.../setupvars.sh
+export WHISPER_OPENVINO=1
+pip install --force-reinstall ./pywhispercpp
+```
+
+Of course you need to follow all the other OpenVINO shenenigans as well.
+
 ## Patch for adding `whisper_ctx_init_openvino_encoder`
 
 ```diff
