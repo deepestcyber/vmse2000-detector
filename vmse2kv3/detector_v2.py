@@ -11,7 +11,7 @@ import string
 import socket
 
 import numpy as np
-#import sounddevice as sd
+import sounddevice as sd
 import pywhispercpp.constants as constants
 import _pywhispercpp as pw
 import logging
@@ -43,8 +43,7 @@ class SwearWordDetector:
         self,
         model='tiny',
         input_device: int = None,
-        silence_threshold: int = 8,
-        q_threshold: int = 16,
+        queue_threshold: int = 16,
         block_duration: int = 30,
         swear_words: list[str] | None = None,
         firmware_address: tuple[str, int] | None = None,
@@ -54,7 +53,7 @@ class SwearWordDetector:
         """
         :param model: whisper.cpp model name or a direct path to a`ggml` model
         :param input_device: The input device (aka microphone), keep it None to take the default
-        :param q_threshold: The inference won't be running until the data queue is having at least `q_threshold` elements
+        :param queue_threshold: The inference won't be running until the data queue is having at least `queue_threshold` elements
         :param block_duration: minimum time audio updates in ms
         :param model_params: any other parameter to pass to the whsiper.cpp model see ::: pywhispercpp.constants.PARAMS_SCHEMA
         """
@@ -70,7 +69,7 @@ class SwearWordDetector:
             raise ValueError("Need swear words for detection.")
 
         self.swear_words = swear_words
-        self.q_threshold = q_threshold
+        self.queue_threshold = queue_threshold
 
         self.firmware_address = firmware_address
 
@@ -103,7 +102,7 @@ class SwearWordDetector:
         audio_data = audio_data.tobytes()
         self.q.put(indata.copy())
 
-        if self.q.qsize() > self.q_threshold:
+        if self.q.qsize() > self.queue_threshold:
             self._transcribe_speech()
 
     def _transcribe_speech(self):
@@ -113,11 +112,14 @@ class SwearWordDetector:
             audio_data = np.append(audio_data, self.q.get())
 
         # Appending zeros to the audio data as a workaround for short audio packets
-        audio_data = np.concatenate([audio_data, np.zeros((int(self.sample_rate) + 10))])
+        #audio_data = np.concatenate([audio_data, np.zeros((int(self.sample_rate) + 10))])
 
         # running the inference, will call the new segment callback
         # (self.on_new_segment) when new segments are detected.
+        a = time.time()
         self.pwccp_model.transcribe(audio_data)
+        b = time.time()
+        print("transcribe time:",b-a, "record time:", len(audio_data) / 16000)
 
     def send_word(self, word):
         word = bytes(word, 'utf-8')
@@ -199,15 +201,16 @@ class SwearWordDetector:
         instance.new_segment_callback(ctx, n_new)
 
     def start(self) -> None:
-        data = Model._load_audio('./data/nutteschlampekacksheisse_16k.wav')
+        if False:
+            data = Model._load_audio('/home/pi/code/whisper.cpp/samples/jfk.wav')
 
-        for i in range(0, len(data), self.block_size):
-            frame = data[i:i+self.block_size]
+            for i in range(0, len(data), self.block_size):
+                frame = data[i:i+self.block_size]
 
-            self._audio_callback(frame, self.block_size, 0, 0)
+                self._audio_callback(frame, self.block_size, 0, 0)
 
 
-        return
+            return
 
         with sd.InputStream(
                 device=self.input_device,  # the default input device
@@ -225,7 +228,6 @@ class SwearWordDetector:
 
     @staticmethod
     def available_devices():
-        return []  # FIXME
         return sd.query_devices()
 
 
@@ -237,7 +239,15 @@ def _main():
                              f'available devices {SwearWordDetector.available_devices()}')
     parser.add_argument('-bd', '--block_duration', default=150, type=int,
                         help=f"minimum time audio updates in ms, default to %(default)s")
-    parser.add_argument('--host', type=str, default='localhost',
+    parser.add_argument('-qt', '--queue_threshold', default=16, type=int, 
+                        help="number of items in the audio queue before transcribing. default %(default)s")
+    parser.add_argument('-actx', '--audio_context', default=1500, type=int,
+                        help=(
+                            "Audio context window size. Lower is faster. Note for OpenVINO: Must be supported "
+                            "by the model. Use the custom OpenVINO conversion script in ./scripts/ to build "
+                            "a model that supports lower audio contexts."),
+    )
+    parser.add_argument('--host', type=str, default='0.0.0.0',
         help='address to send detected words to',
     )
     parser.add_argument('--port', type=int, default=1800,
@@ -255,9 +265,13 @@ def _main():
         model=args.model,
         input_device=args.input_device,
         block_duration=args.block_duration,
+        queue_threshold=args.queue_threshold,
         language="de",
         swear_words=swear_words,
         firmware_address=(args.host, args.port),
+        audio_ctx=args.audio_context,
+        #greedy={'best_of': 5},
+        #params_sampling_strategy=0, # 0 = greedy, 1 = beam search
     )
     detector.start()
 
