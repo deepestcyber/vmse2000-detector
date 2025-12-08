@@ -9,6 +9,7 @@ from typing import Callable
 from functools import partial
 import string
 import socket
+import threading
 
 import numpy as np
 import sounddevice as sd
@@ -64,6 +65,7 @@ class SwearWordDetector:
         self.block_duration = block_duration
         self.block_size = int(self.sample_rate * self.block_duration / 1000)
         self.q = queue.Queue()
+        self.transcribe_queue = queue.Queue()
 
         if not swear_words:
             raise ValueError("Need swear words for detection.")
@@ -97,20 +99,16 @@ class SwearWordDetector:
             logging.warning(F"underlying audio stack warning:{status}")
 
         assert frames == self.block_size
-        audio_data = map(lambda x: (x + 1) / 2, indata)  # normalize from [-1,+1] to [0,1]
-        audio_data = np.fromiter(audio_data, np.float16)
-        audio_data = audio_data.tobytes()
+
         self.q.put(indata.copy())
 
         if self.q.qsize() > self.queue_threshold:
-            self._transcribe_speech()
+            audio_data = np.array([])
+            while self.q.qsize() > 0:
+                audio_data = np.append(audio_data, self.q.get())
+            self.transcribe_queue.put(audio_data.copy())
 
-    def _transcribe_speech(self):
-        audio_data = np.array([])
-        while self.q.qsize() > 0:
-            # get all the data from the q
-            audio_data = np.append(audio_data, self.q.get())
-
+    def _transcribe_speech(self, audio_data):
         # Appending zeros to the audio data as a workaround for short audio packets
         #audio_data = np.concatenate([audio_data, np.zeros((int(self.sample_rate) + 10))])
 
@@ -196,6 +194,14 @@ class SwearWordDetector:
             # final processing of tokens
             self.process_merged_tokens(all_tokens)
 
+    def transcription_process(self, *args, **kwargs):
+        while True:
+            audio_data = self.transcribe_queue.get()
+
+            print('transcribing')
+            self._transcribe_speech(np.array(audio_data))
+            print('end of transcribing')
+
     @staticmethod
     def on_new_segment(ctx, n_new, user_data, instance) -> None:
         instance.new_segment_callback(ctx, n_new)
@@ -211,6 +217,9 @@ class SwearWordDetector:
 
 
             return
+
+        t = threading.Thread(target=self.transcription_process)
+        t.start()
 
         with sd.InputStream(
                 device=self.input_device,  # the default input device
