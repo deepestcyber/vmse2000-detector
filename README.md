@@ -26,6 +26,8 @@
 
 Setup venv, install requirements and build whisper.cpp python bindings:
 
+    sudo apt install libsdl2-mixer-dev libportaudio2
+
     python -m venv <envdir>
     source activate <envdir>/bin/activate
 
@@ -42,7 +44,79 @@ section.
 
 ### Installing pywhispercpp + OpenVINO
 
-TODO take from raspi
+Download the OpenVINO SDK e.g. via https://docs.openvino.ai/2025/get-started/install-openvino/install-openvino-archive-linux.html.
+
+```
+pi@vmse2000:~/code/v3 $ ls -l openvino/
+total 75M
+-rw-r--r--  1 pi pi  37M Dec  1 11:03 openvino_toolkit_ubuntu22_2025.4.0.20398.8fdad55727d_arm64.tgz
+```
+
+**IMPORTANT**: as of the time of writing this library will miss a crucial invocation
+of `whisper_ctx_init_openvino_encoder`. This is not very hard to do, the patch can be found
+at the end of this section. *Apply the patch after cloning and before installing*.
+For your convenience, this repo uses a fork with the patch applied.
+
+```
+git clone https://github.com/absadiki/pywhispercpp.git
+
+export WHISPER_OPENVINO=1
+source openvino/openvino_toolkit*/setupvars.sh
+
+pip install --force-reinstall ./pywhispercpp
+pip install sounddevice~=0.4.6
+```
+
+Now that is not enough, of course. The built wheel will bundle the core OpenVINO library
+but not all the other parts of the library. The core runtime will have an ELF rpath set,
+a relative path where it will look for other modules of the library. There will be ni
+other libraries and therefore we won't be able to parse XML files, leading to this error:
+
+```
+whisper_ctx_init_openvino_encoder_with_state: loading OpenVINO model from '/home/pi/code/v3/model
+s/ggml-base-encoder-openvino.xml'
+whisper_ctx_init_openvino_encoder_with_state: first run on a device may take a while ...
+whisper_openvino_init: path_model = /home/pi/code/v3/models/ggml-base-encoder-openvino.xml, devic
+e = CPU, cache_dir = /home/pi/code/v3/models/ggml-base-encoder-openvino-cache
+in openvino encoder compile routine: exception: Exception from src/inference/src/cpp/core.cpp:97:
+Exception from src/inference/src/model_reader.cpp:155:
+Unable to read the model: /home/pi/code/v3/models/ggml-base-encoder-openvino.xml Please check tha
+t model format: xml is supported and the model is correct. Available frontends:
+
+
+whisper_ctx_init_openvino_encoder_with_state: failed to init OpenVINO encoder from '/home/pi/code
+/v3/models/ggml-base-encoder-openvino.xml'
+```
+
+I found that the simplest remedy is to copy the runtime libraries to the python module's
+library folder and replace the runtime library with the original.
+
+1. Find the venv directory + pywhispercpp libs module
+3. Copy stuff over
+4. Symlink core library
+
+Step 1
+
+```
+$ poetry run python -c 'import pywhispercpp; print(pywhispercpp)'
+<module 'pywhispercpp' from '/home/pi/.cache/pypoetry/virtualenvs/vmse2kv3-d5r8ZGfy-py3.13/lib/python3.13/site-packages/pywhispercpp/__init__.py'>
+```
+
+So the libs will probably be at `/home/pi/.cache/pypoetry/virtualenvs/vmse2kv3-d5r8ZGfy-py3.13/lib/python3.13/site-packages/pywhispercpp.libs/`.
+
+Copy all the libraries and replace linked runtime library:
+
+```
+cp openvino/openvino_toolkit_.../runtime/lib/aarch64/libopenvino* /home/pi/.cache/pypoetry/virtualenvs/vmse2kv3-d5r8ZGfy-py3.13/lib/python3.13/site-packages/pywhispercpp.libs/
+cd /home/pi/.cache/pypoetry/virtualenvs/vmse2kv3-d5r8ZGfy-py3.13/lib/python3.13/site-packages/pywhispercpp.libs
+ln -sf libopenvino.so.2025.4.0 libopenvino-f2621866.so.2025.4.0
+```
+
+**Important**: This is an example, `libopenvino-f26...` might be called differently.
+
+This should run now!
+
+
 
 ## Downloading the model
 
@@ -56,70 +130,57 @@ pywhispercpp/whisper.cpp/models/download-ggml-model.sh base
 The "base" model is recommended for a Raspberry Pi 5.
 
 
-### Optimizations
+## Patch for adding `whisper_ctx_init_openvino_encoder`
 
-#### OpenVINO
+```diff
+diff --git a/pywhispercpp/model.py b/pywhispercpp/model.py
+index 39944f1..50ddc79 100644
+--- a/pywhispercpp/model.py
++++ b/pywhispercpp/model.py
+@@ -254,8 +254,10 @@ class Model:
+         :return:
+         """
+         logger.info("Initializing the model ...")
++
+         with utils.redirect_stderr(to=self.redirect_whispercpp_logs_to):
+             self._ctx = pw.whisper_init_from_file(self.model_path)
++            pw.whisper_ctx_init_openvino_encoder(self._ctx)
 
-We may want to squeeze all the performance we can get out of our compute
-platform (currently: Raspberry Pi 4). OpenVINO is a good candidate for this.
+     def _set_params(self, kwargs: dict) -> None:
+         """
+@@ -384,4 +386,4 @@ class Model:
+         Free up resources
+         :return: None
+         """
+-        pw.whisper_free(self._ctx)
+\ No newline at end of file
++        pw.whisper_free(self._ctx)
+diff --git a/src/main.cpp b/src/main.cpp
+index 68c0ea5..2329397 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -226,6 +226,11 @@ int whisper_full_wrapper(
+     return whisper_full(ctx_w->ptr, params, samples_ptr, n_samples);
+ }
 
-I focus on aarch64 for this step - it should be easier when using x86.
-The main problem is actually the python whispercpp integration and bazel,
-of course.
++int whisper_ctx_init_openvino_encoder_wrapper(struct whisper_context_wrapper * ctx_w) {
++    whisper_ctx_init_openvino_encoder(ctx_w->ptr, nullptr, "CPU", nullptr);
++    return 0;
++}
++
+ int whisper_full_parallel_wrapper(
+         struct whisper_context_wrapper * ctx_w,
+         struct whisper_full_params   params,
+@@ -666,6 +671,10 @@ PYBIND11_MODULE(_pywhispercpp, m) {
+                                                                                 "This contains probabilities, timestamps, etc.");
 
-First, download the [2023.2.0 release](https://github.com/openvinotoolkit/openvino/releases/tag/2023.2.0)
-of OpenVINO (for aarch64).
+     m.def("whisper_full_get_token_p", &whisper_full_get_token_p_wrapper, "Get the probability of the specified token in the specified segment.");
++
++    ////////////////////////////////////////////////////////////////////////////
++
++    m.def("whisper_ctx_init_openvino_encoder", &whisper_ctx_init_openvino_encoder_wrapper, "Initialize OpenVINO encoder.");
 
-```bash
-mkdir openvino
-cd openvino
-wget https://storage.openvinotoolkit.org/repositories/openvino/packages/2023.2/linux/l_openvino_toolkit_debian9_2023.2.0.13089.cfd42bd2cb0_arm64.tgz
-tar -xf l_openvino_toolkit_debian9_2023.2.0.13089.cfd42bd2cb0_arm64.tgz
+     ////////////////////////////////////////////////////////////////////////////
+
 ```
 
-**Important:** The path of the unpacked directory should now be
-`/home/pi/code/v3/openvino/l_openvino_toolkit_debian9_2023.2.0.13089.cfd42bd2cb0_arm64/`.
-This is important because the modifications to the bazel build env of pywhispercpp
-are relying on this information.
-
-The submodule of pywhispercpp already points to the fork that has the
-necessary bazel changes, you need to change to that branch, though.
-Of course, a rebuild is also necessary.
-
-```bash
-cd pywhispercpp
-git switch feature/openvino
-./tools/bazel build //:whispercpp_wheel
-```
-
-After that you need to uninstall and reinstall the resulting wheel like
-in the initial installation:
-
-```bash
-poetry run pip uninstall whispercpp
-poetry run pip install pywhispercpp/bazel-bin/whispercpp-0.0.17-cp310-cp310-manylinux2014_aarch64.whl
-```
-
-Now you should be able to run models with OpenVINO encoder support.
-You may need to set the `LD_LIBRARY_PATH` appropriately:
-
-```bash
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PWD/openvino/l_openvino_toolkit_debian9_2023.2.0.13089.cfd42bd2cb0_arm64/runtime/lib/:$PWD/openvino/l_openvino_toolkit_debian9_2023.2.0.13089.cfd42bd2cb0_arm64/runtime/3rdparty/tbb/lib/"
-```
-
-Note that if you want to use smaller audio context sizes you *must* convert
-the model with the modified openvino conversion script
-[`convert-whisper-to-openvino-audioctx.py`](./scripts/convert-whisper-to-openvino-audioctx.py)
-which allows for the `--audio-context` parameter:
-
-```bash
-poetry shell
-cd pywhispercpp/extern/whispercpp/models
-cp ../../../scripts/convert-whisper-to-openvino-audioctx.py .
-[if not already: pip install -r openvino-conversion-requirements.txt]
-python convert-whisper-to-openvino-audioctx.py --model base --audio-context 512
-```
-
-You can then deploy/use the resulting `ggml-base-encoder-openvino.{xml,bin}`
-files by simply placing them in the models directory of your choice and
-selecting `ggml-base` as your model.
