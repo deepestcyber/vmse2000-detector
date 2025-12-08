@@ -130,6 +130,32 @@ pywhispercpp/whisper.cpp/models/download-ggml-model.sh base
 The "base" model is recommended for a Raspberry Pi 5.
 
 
+## Optimizations
+
+There are a few optimizations we can do:
+
+- runtime: like using an OpenVINO encoder which is way faster
+- model: using a smaller audio context size to have less
+  compute (at the cost of the max. audio length per model computation step)
+- capturing: smaller audio chunks
+
+Currently the best way seems to be to use OpenVINO and create an encoder
+that has a smaller audio context than the default of 1500. This can be
+done using the script `scripts/convert-whisper-to-openvino-audioctx.py`.
+This is a modified version of whisper.cpp's OpenVINO conversion script
+and therefore needs the same environment. Refer to whisper.cpp's README.
+
+Example:
+
+```
+python ./scripts/convert-whisper-to-openvino-audioctx.py \
+        --model ggml-base --audio_context 768
+# creates ggml-base-encoder-openvino.bin, ggml-base-encoder-openvino.xml
+mkdir -p models/base-ctx768
+cp ggml-base.bin ggml-base-encoder-openvino* models/base-ctx768
+whisper-cli --audio-ctx 768 -m ./models/base-ctx768/ggml-base.bin
+```
+
 ## Debugging
 
 In case you want to debug whisper.cpp through `pywhispercpp` you have to
