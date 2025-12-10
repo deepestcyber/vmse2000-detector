@@ -21,8 +21,6 @@ from termcolor import colored
 
 
 def token_to_str(ctx, tid: int) -> str:
-    return pw.whisper_token_to_str(ctx, tid)
-
     # this exists since the given ctx.token_to_str cannot deal with
     # all unicode characters apparently :)
     return str(pw.whisper_token_to_bytes(ctx, tid), 'utf8', 'ignore')
