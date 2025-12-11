@@ -129,6 +129,8 @@ class SwearWordDetector:
         block_duration: int = 30,
         swear_words: list[str] | None = None,
         firmware_address: tuple[str, int] | None = None,
+        phoneme_invocation_threshold = 0.5,
+        phoneme_correction_threshold = 1.0,
         **model_params,
     ):
 
@@ -153,8 +155,9 @@ class SwearWordDetector:
 
         self.swear_words = swear_words
         self.queue_threshold = queue_threshold
-
         self.firmware_address = firmware_address
+        self.phoneme_invocation_threshold = phoneme_invocation_threshold
+        self.phoneme_correction_threshold = phoneme_correction_threshold
 
         self.pwccp_model = Model(
             model,
@@ -172,7 +175,6 @@ class SwearWordDetector:
             self.pwccp_model._params,
             partial(self.on_new_segment, instance=self),
         )
-
 
     def _audio_callback(self, indata, frames, time, status):
         # Ideally called from sounddevice InputStream thread
@@ -275,7 +277,7 @@ class SwearWordDetector:
             # check individual tokens for phonetic similarity with swear
             # words if their probability is low.
             for token, proba in all_tokens:
-                if proba >= 0.5:
+                if proba >= self.phoneme_invocation_threshold:
                     continue
 
                 token = token.lower().strip()
@@ -283,7 +285,7 @@ class SwearWordDetector:
                     continue
 
                 for swear_word in self.swear_words:
-                    if (score := compare_phonemes(token, swear_word)) < 1:
+                    if (score := compare_phonemes(token, swear_word)) < self.phoneme_correction_threshold:
                         print(f"{token} => {swear_word} because of phonemes! ({score})")
                         all_tokens.append((swear_word, score))
 
@@ -352,6 +354,23 @@ def _main():
                             "by the model. Use the custom OpenVINO conversion script in ./scripts/ to build "
                             "a model that supports lower audio contexts."),
     )
+    parser.add_argument('--phoneme-correction-threshold', type=float, default=1.0,
+        help=(
+            'Threshold to reach to cause a token to be corrected with a swear '
+            'word. The score that is compared against this threshold is a '
+            'weighted combination of the levensthein distance on the output '
+            'of different phoneme translation algorithms, so the higher the '
+            'score, the higher the dissimilarity.'
+        ),
+    )
+    parser.add_argument('--phoneme-invocation-threshold', type=float, default=0.5,
+        help=(
+            'Threshold for the word probability to invoke the phoneme '
+            'error correction (i.e. finding a swear word that sounds similar). '
+            'This threshold is compared against the conditional probability of '
+            'the word\'s tokens as detected by whisper.'
+        ),
+    )
     parser.add_argument('--host', type=str, default='0.0.0.0',
         help='address to send detected words to',
     )
@@ -374,6 +393,8 @@ def _main():
         language="de",
         swear_words=swear_words,
         firmware_address=(args.host, args.port),
+        phoneme_invocation_threshold=args.phoneme_invocation_threshold,
+        phoneme_correction_threshold=args.phoneme_correction_threshold,
         audio_ctx=args.audio_context,
         #greedy={'best_of': 5},
         #params_sampling_strategy=0, # 0 = greedy, 1 = beam search
