@@ -82,7 +82,13 @@ words_to_correct = {
     "nutte": 0.6,
     "cyber": 0.6,
     "kackbratze": 0.8,
-    "fotze": 0.9,
+    "fotze": 0.7,
+    "arschgeige": 0.9,
+    "arschgesicht": 0.9,
+    "ass": 0.9,
+    "bimbo": 0.9,
+    "bonze": 0.9,
+    "asshole": 0.9,
 }
 
 

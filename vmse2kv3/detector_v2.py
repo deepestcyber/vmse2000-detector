@@ -36,7 +36,13 @@ WORDS_TO_CORRECT = {
     "nutte": 0.6,
     "cyber": 0.6,
     "kackbratze": 0.8,
-    "fotze": 0.9,
+    "fotze": 0.7,
+    "arschgeige": 0.9,
+    "arschgesicht": 0.9,
+    "ass": 0.9,
+    "bimbo": 0.9,
+    "bonze": 0.9,
+    "asshole": 0.9,
 }
 
 
@@ -319,6 +325,9 @@ class SwearWordDetector:
             # words if their probability is low.
             for token, proba in all_tokens:
                 if proba >= self.phoneme_invocation_threshold:
+                    continue
+
+                if proba <= 0.15:
                     continue
 
                 token = token.lower().strip()
