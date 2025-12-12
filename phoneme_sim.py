@@ -1,3 +1,11 @@
+"""Quick benchmark to evaluate phoneme correction on a small dataset.
+
+Measures accuracy, specificity and sensitivity.
+
+Our goal is to have a sensitivity of 1 since false-positives are our
+nemesis. But it would be good to have a specificity > 0.5 as well :)
+"""
+
 import itertools
 import re
 from pprint import pprint
@@ -5,6 +13,11 @@ from pprint import pprint
 from phonetics import metaphone, soundex, nysiis
 import numpy as np
 from cologne_phonetics import encode as _cologne_encode
+
+from vmse2kv3.phonsim import sequence_distance
+from g2p_de import G2p
+
+g2p = G2p()
 
 
 def cologne_encode(s):
@@ -63,7 +76,39 @@ def soundex_german(source, size=4):
     return ''.join(t)
 
 
+
+
+words_to_correct = {
+    "nutte": 0.6,
+    "cyber": 0.6,
+    "kackbratze": 0.8,
+    "fotze": 0.9,
+}
+
+
 def compare(word1, word2, weight):
+    if word2 not in words_to_correct:
+        return 100, ['word not in correct list']
+
+    code1 = cologne_encode(word1)
+    code2 = cologne_encode(word2)
+
+    #print(word1, word2)
+    #print(g2p(word1), g2p(word2))
+
+    #if not (code1.startswith(code2) or code2.startswith(code1)):
+    #    return 100, []
+
+    code1 = g2p(word1)
+    code2 = g2p(word2)
+
+    return sequence_distance(code1, code2), [
+        f"{code1} vs. {code2}"
+    ]
+
+
+    trace = []
+
     algorithms = {
         #"soundex": soundex,
         "soundex": soundex_german,
@@ -72,19 +117,12 @@ def compare(word1, word2, weight):
         "cologne": cologne_encode,
     }
 
-    code1 = cologne_encode(word1)
-    code2 = cologne_encode(word2)
-
-    if not (code1.startswith(code2) or code2.startswith(code1)):
-        return 2.0, []
-
-    trace = []
     total = 0.0
     for entry, algo in algorithms.items():
         code1 = algo(word1)
         code2 = algo(word2)
 
-        lev = levenshtein (code1, code2)
+        lev = levenshtein (code1, code2) / len(code2)
         currentWeight = weight[entry]
         #print ("comparing %s with %s for %s (%0.2f: weight %0.2f)" % (code1, code2, entry, lev, currentWeight))
         subtotal = lev * currentWeight
@@ -103,7 +141,7 @@ with open('data/phoneme.txt') as f:
         phoneme_data.append(line.split(' '))
 
 
-threshold = 1.0
+base_threshold = 0.6
 
 weight = {
     "soundex": 0.2,
@@ -120,6 +158,8 @@ tn = 0
 for is_good, w1, w2 in phoneme_data:
     is_good = int(is_good)
     score, trace = compare(w1, w2, weight)
+
+    threshold = words_to_correct.get(w2, base_threshold)
 
     if score <= threshold and is_good:
         tp += 1
@@ -141,11 +181,3 @@ print(f"Accuracy: {(tp+tn) / (fp+fn+tp+tn)}")
 print(f"Sensitivity: TP / (FN+TP): {tp / (fn + tp)}")
 print(f"Specificity: TN / (FP+TN): {tn / (fp + tn)}")
 
-
-"""
-words = ["kacke", "nutte", "kacka", "nutter", "note"]
-
-for word1, word2 in itertools.product(words, words):
-    if word1 == word2: continue
-    compare(word1, word2)
-"""
