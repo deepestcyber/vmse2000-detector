@@ -13,7 +13,7 @@ import socket
 import threading
 
 import numpy as np
-#import sounddevice as sd
+import sounddevice as sd
 import pywhispercpp.constants as constants
 import _pywhispercpp as pw
 import logging
