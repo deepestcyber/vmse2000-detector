@@ -1,3 +1,6 @@
 [submodule "pywhispercpp"]
 	path = pywhispercpp
 	url = git@github.com:githubnemo/pywhispercpp.git
+[submodule "ext/g2p_de"]
+	path = ext/g2p_de
+	url = git@github.com:gooofy/g2p_de.git

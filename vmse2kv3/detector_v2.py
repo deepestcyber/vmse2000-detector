@@ -19,12 +19,25 @@ import _pywhispercpp as pw
 import logging
 from pywhispercpp.model import Model
 from termcolor import colored
-from phonetics import metaphone, soundex, nysiis
-from cologne_phonetics import encode as _cologne_encode
+
+from g2p_de import G2p
+from phonsim import sequence_distance
 
 
-def cologne_encode(s):
-    return _cologne_encode(s)[0][1]
+# Graphene to phoneme converter.
+g2p = G2p()
+
+# list of words that are often times confused with very similarly sounding
+# words and should be considered for phoneme correction. we use this list
+# as a pre-filter to keep the false-positives from phoneme correction at bay.
+#
+# Each word is assigned a custom threshold at which a correction is applied.
+WORDS_TO_CORRECT = {
+    "nutte": 0.6,
+    "cyber": 0.6,
+    "kackbratze": 0.8,
+    "fotze": 0.9,
+}
 
 
 def token_to_str(ctx, tid: int) -> str:
@@ -96,6 +109,15 @@ def soundex_german(source, size=4):
 
 
 def compare_phonemes(word1, word2):
+    code1 = g2p(word1)
+    code2 = g2p(word2)
+
+    return sequence_distance(code1, code2), [
+        f"{code1} vs. {code2}"
+    ]
+
+    # old:
+
     code1 = cologne_encode(word1)
     code2 = cologne_encode(word2)
 
@@ -148,6 +170,7 @@ class SwearWordDetector:
         firmware_address: tuple[str, int] | None = None,
         phoneme_invocation_threshold = 0.5,
         phoneme_correction_threshold = 1.0,
+        temperature=0.0,
         **model_params,
     ):
 
@@ -183,6 +206,7 @@ class SwearWordDetector:
             print_timestamps=False,
             single_segment=True,
             no_context=True,
+            temperature=temperature,
             **model_params,
         )
 
@@ -303,12 +327,12 @@ class SwearWordDetector:
 
                 found_match = False
 
-                for swear_word in self.swear_words:
+                for swear_word, threshold in WORDS_TO_CORRECT.items():
                     score, trace = compare_phonemes(token, swear_word)
-                    if score < self.phoneme_correction_threshold:
+                    if score < threshold:
                         print(f"{token} (p={proba}) => {swear_word} because of phonemes! ({score})")
                         print(trace)
-                        all_tokens.append((swear_word, score))
+                        all_tokens.append((swear_word, 1 - score))
                         found_match = True
                         break
 
@@ -372,7 +396,7 @@ def _main():
                              f'available devices {SwearWordDetector.available_devices()}')
     parser.add_argument('-bd', '--block_duration', default=150, type=int,
                         help=f"minimum time audio updates in ms, default to %(default)s")
-    parser.add_argument('-qt', '--queue_threshold', default=16, type=int, 
+    parser.add_argument('-qt', '--queue_threshold', default=16, type=int,
                         help="number of items in the audio queue before transcribing. default %(default)s")
     parser.add_argument('-actx', '--audio_context', default=1500, type=int,
                         help=(
@@ -403,6 +427,7 @@ def _main():
     parser.add_argument('--port', type=int, default=1800,
         help='port to send detected words to',
     )
+    parser.add_argument('--temperature', type=float, default=0.0)
     parser.add_argument('word_list', type=argparse.FileType('r'),
         help="Path to the newline-separated list of swear words to be detected.",
     )
@@ -422,6 +447,7 @@ def _main():
         phoneme_invocation_threshold=args.phoneme_invocation_threshold,
         phoneme_correction_threshold=args.phoneme_correction_threshold,
         audio_ctx=args.audio_context,
+        temperature=args.temperature,
         #greedy={'best_of': 5},
         #params_sampling_strategy=0, # 0 = greedy, 1 = beam search
     )
