@@ -13,13 +13,18 @@ import socket
 import threading
 
 import numpy as np
-import sounddevice as sd
+#import sounddevice as sd
 import pywhispercpp.constants as constants
 import _pywhispercpp as pw
 import logging
 from pywhispercpp.model import Model
 from termcolor import colored
 from phonetics import metaphone, soundex, nysiis
+from cologne_phonetics import encode as _cologne_encode
+
+
+def cologne_encode(s):
+    return _cologne_encode(s)[0][1]
 
 
 def token_to_str(ctx, tid: int) -> str:
@@ -91,18 +96,28 @@ def soundex_german(source, size=4):
 
 
 def compare_phonemes(word1, word2):
+    code1 = cologne_encode(word1)
+    code2 = cologne_encode(word2)
+
+    if not (code1.startswith(code2) or code2.startswith(code1)):
+        return 2.0, []
+
+    # more complex version with way worse specificity and sensitivity below:
     weight = {
         "soundex": 0.2,
         "metaphone": 0.5,
-        "nysiis": 0.1
+        "nysiis": 0.1,
+        "cologne": 0.2,
     }
 
     algorithms = {
-        #"soundex": soundex,
         "soundex": soundex_german,
         "metaphone": metaphone,
         "nysiis": nysiis,
+        "cologne": cologne_encode,
     }
+
+    trace = []
 
     total = 0.0
     for entry, algo in algorithms.items():
@@ -113,10 +128,12 @@ def compare_phonemes(word1, word2):
         currentWeight = weight[entry]
         if False:
             print ("comparing %s with %s for %s (%0.2f: weight %0.2f)" % (code1, code2, entry, lev, currentWeight))
+
         subtotal = lev * currentWeight
+        trace.append([(code1, code2), entry, lev, subtotal])
         total += subtotal
 
-    return total
+    return total, trace
 
 
 class SwearWordDetector:
@@ -284,10 +301,19 @@ class SwearWordDetector:
                 if not token.isalpha():
                     continue
 
+                found_match = False
+
                 for swear_word in self.swear_words:
-                    if (score := compare_phonemes(token, swear_word)) < self.phoneme_correction_threshold:
-                        print(f"{token} => {swear_word} because of phonemes! ({score})")
+                    score, trace = compare_phonemes(token, swear_word)
+                    if score < self.phoneme_correction_threshold:
+                        print(f"{token} (p={proba}) => {swear_word} because of phonemes! ({score})")
+                        print(trace)
                         all_tokens.append((swear_word, score))
+                        found_match = True
+                        break
+
+                if found_match:
+                    break
 
             # final processing of tokens
             self.process_merged_tokens(all_tokens)

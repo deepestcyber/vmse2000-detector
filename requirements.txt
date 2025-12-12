@@ -3,3 +3,4 @@ flake8>=6.1.0
 numpy>=1.26.2
 termcolor>=2.4.0
 phonetics
+cologne_phonetics
