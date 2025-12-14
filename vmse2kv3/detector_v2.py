@@ -39,7 +39,7 @@ WORDS_TO_CORRECT = {
     "fotze": 0.7,
     "arschgeige": 0.9,
     "arschgesicht": 0.9,
-    "ass": 0.9,
+    "ass": 0.5,
     "bimbo": 0.9,
     "bonze": 0.9,
     "asshole": 0.9,
