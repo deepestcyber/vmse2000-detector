@@ -10,6 +10,17 @@ fi
 source ~/envs/vmse/bin/activate
 source openvino/openvino_toolkit_ubuntu22_2025.4.0.20398.8fdad55727d_arm64/setupvars.sh
 
+# small is still a bit too slow - would need a bit more context i guess
+if false; then
+python vmse2kv3/detector_v2.py \
+        -ind "$dev" \
+        -m models/ggml-smallctx768.bin \
+       -bd 150 \
+       -qt 16 \
+       -actx 768 \
+        vmse2kv3/assets/swear_words.txt
+fi
+
 python vmse2kv3/detector_v2.py \
         -ind "$dev" \
         -m models/ggml-basectx768.bin \
