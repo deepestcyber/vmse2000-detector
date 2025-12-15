@@ -198,6 +198,66 @@ WEIGHTS = {
     'asp':          0.05,
 }
 
+
+WEIGHTS = {
+    # =========================
+    # VOWEL FEATURES
+    # =========================
+
+    # height/backness dominate vowel similarity
+    'height':   0.28,
+    'back':     0.25,
+
+    # centralization important for schwa / ɐ / syllabic sonorants
+    'central':  0.22,
+
+    # roundedness matters but less than quality
+    'round':    0.15,
+
+    # vowel length is weakly contrastive perceptually
+    'long':     0.03,
+
+
+    # =========================
+    # CONSONANT FEATURES
+    # =========================
+
+    # place of articulation (primary cue)
+    'place_labial':   0.18,
+    'place_alv':      0.18,
+    'place_post':     0.18,
+    'place_pal':      0.18,
+    'place_velar':    0.18,
+    'place_glottal':  0.22,   # h must be very distinct
+
+    # manner of articulation (primary cue)
+    'manner_stop':    0.22,
+    'manner_fric':    0.24,
+    'manner_aff':     0.26,
+    'manner_nasal':   0.20,
+    'manner_lat':     0.18,
+    'manner_approx':  0.14,
+
+    # voicing less salient than place/manner
+    'voiced':         0.12,
+
+    # sonorancy helps n~l~r cluster
+    'sonorant':       0.10,
+
+    # aspiration weak in German
+    'asp':            0.04,
+
+ }
+
+WEIGHTS.update({
+    'height':   0.18,
+    'back':     0.30,   # dominates
+    'round':    0.12,
+    'tense':    0.14,
+    'reduced':  0.40,   # schwa penalty
+})
+
+
 #######################################################################
 # 5) Similarity computation
 #######################################################################

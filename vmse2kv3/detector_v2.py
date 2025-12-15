@@ -33,16 +33,16 @@ g2p = G2p()
 #
 # Each word is assigned a custom threshold at which a correction is applied.
 WORDS_TO_CORRECT = {
-    "nutte": 0.6,
-    "cyber": 0.6,
-    "kackbratze": 0.8,
-    "fotze": 0.7,
-    "arschgeige": 0.9,
-    "arschgesicht": 0.9,
-    "ass": 0.5,
-    "bimbo": 0.9,
-    "bonze": 0.9,
-    "asshole": 0.9,
+    "nutte": 0.20,
+    "cyber": 0.13,
+    "kackbratze": 0.50,
+    "fotze": 0.15,
+    "arschgeige": 0.51,
+    "arschgesicht": 0.42,
+    "ass": 0.02,
+    "bimbo": 0.397,
+    "bonze": 0.40,
+    "asshole": 0.49,
 }
 
 
@@ -62,106 +62,14 @@ def colored_token(token_str, token_prob):
     return colored(token_str, colors[idx])
 
 
-def levenshtein(seq1, seq2):
-    size_x = len(seq1) + 1
-    size_y = len(seq2) + 1
-    matrix = np.zeros ((size_x, size_y))
-    for x in range(size_x):
-        matrix [x, 0] = x
-    for y in range(size_y):
-        matrix [0, y] = y
-
-    for x in range(1, size_x):
-        for y in range(1, size_y):
-            if seq1[x-1] == seq2[y-1]:
-                matrix [x,y] = min(
-                    matrix[x-1, y] + 1,
-                    matrix[x-1, y-1],
-                    matrix[x, y-1] + 1
-                )
-            else:
-                matrix [x,y] = min(
-                    matrix[x-1,y] + 1,
-                    matrix[x-1,y-1] + 1,
-                    matrix[x,y-1] + 1
-                )
-    return (matrix[size_x - 1, size_y - 1])
-
-
-def soundex_german(source, size=4):
-    code_map = {
-        'a': '0',  'e': '0', 'i': '0', 'o': '0', 'u': '0', 'ä': '0', 'ö': '0', 'ü': '0', 'y': '0', 'j': '0', 'h': '0',
-        'b': '1', 'p': '1', 'f': '1', 'v': '1', 'w': '1',
-        'c': '2', 'g': '2', 'k': '2', 'q': '2', 'x': '2', 's': '2', 'z': '2', 'ß': '2',
-        'd': '3', 't': '3',
-        'l': '4',
-        'm': '5', 'n': '5',
-        'r': '6',
-        'ch': '7',
-    }
-    t = [source[0]]
-
-    for c in re.split('(ch|.)', source):
-        if not c:
-            continue
-        digit = code_map[c]
-        if digit and digit != t[-1]:
-            t.append(digit)
-
-    for _ in range(size - len(t)):
-        t.append('0')
-
-    return ''.join(t)
-
-
 def compare_phonemes(word1, word2):
+    """Assumes word2 is the reference word."""
     code1 = g2p(word1)
     code2 = g2p(word2)
 
-    return sequence_distance(code1, code2), [
+    return sequence_distance(code1, code2) / len(code2), [
         f"{code1} vs. {code2}"
     ]
-
-    # old:
-
-    code1 = cologne_encode(word1)
-    code2 = cologne_encode(word2)
-
-    if not (code1.startswith(code2) or code2.startswith(code1)):
-        return 2.0, []
-
-    # more complex version with way worse specificity and sensitivity below:
-    weight = {
-        "soundex": 0.2,
-        "metaphone": 0.5,
-        "nysiis": 0.1,
-        "cologne": 0.2,
-    }
-
-    algorithms = {
-        "soundex": soundex_german,
-        "metaphone": metaphone,
-        "nysiis": nysiis,
-        "cologne": cologne_encode,
-    }
-
-    trace = []
-
-    total = 0.0
-    for entry, algo in algorithms.items():
-        code1 = algo(word1)
-        code2 = algo(word2)
-
-        lev = levenshtein (code1, code2)
-        currentWeight = weight[entry]
-        if False:
-            print ("comparing %s with %s for %s (%0.2f: weight %0.2f)" % (code1, code2, entry, lev, currentWeight))
-
-        subtotal = lev * currentWeight
-        trace.append([(code1, code2), entry, lev, subtotal])
-        total += subtotal
-
-    return total, trace
 
 
 class SwearWordDetector:

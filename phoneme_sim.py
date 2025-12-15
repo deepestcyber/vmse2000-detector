@@ -77,7 +77,23 @@ def soundex_german(source, size=4):
 
 
 
+# for: / max(l1, l2)
+words_to_correct = {
+    "nutte": 0.30,
+    "cyber": 0.15,
+    "kackbratze": 0.50,
+    "fotze": 0.15,
+    "arschgeige": 0.51,
+    "arschgesicht": 0.49,
+    "ass": 0.15,
+    "bimbo": 0.39,
+    "bonze": 0.40,
+    "asshole": 0.56,
+}
 
+
+
+# for: no normalization
 words_to_correct = {
     "nutte": 0.6,
     "cyber": 0.6,
@@ -89,6 +105,34 @@ words_to_correct = {
     "bimbo": 0.9,
     "bonze": 0.9,
     "asshole": 0.9,
+}
+
+# for / min(l1, l2)
+words_to_correct = {
+    "nutte": 0.20,
+    "cyber": 0.13,
+    "kackbratze": 0.50,
+    "fotze": 0.15,
+    "arschgeige": 0.51,
+    "arschgesicht": 0.49,
+    "ass": 0.02,
+    "bimbo": 0.397,
+    "bonze": 0.40,
+    "asshole": 0.49,
+}
+
+# for: / l2
+words_to_correct = {
+    "nutte": 0.20,
+    "cyber": 0.13,
+    "kackbratze": 0.50,
+    "fotze": 0.15,
+    "arschgeige": 0.51,
+    "arschgesicht": 0.42,
+    "ass": 0.02,
+    "bimbo": 0.397,
+    "bonze": 0.40,
+    "asshole": 0.49,
 }
 
 
@@ -108,7 +152,8 @@ def compare(word1, word2, weight):
     code1 = g2p(word1)
     code2 = g2p(word2)
 
-    return sequence_distance(code1, code2), [
+    #return sequence_distance(code1, code2) / min(len(code1), len(code2)), [
+    return sequence_distance(code1, code2) / len(code2), [
         f"{code1} vs. {code2}"
     ]
 

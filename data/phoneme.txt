@@ -1,5 +1,10 @@
 # phoneme data
 #
+# this data is collected from the whisper transcriptions so that we can
+# calibrate an algorithm to correct these words, e.g. using phonetic
+# similarity. for this we need to know whether the pair should be a match
+# and the two words (recognized, actual).
+#
 # first column is whether the pair is a positive or a negative sample (1, 0)
 
 0 auch affe
@@ -36,3 +41,26 @@
 1 hackfräße hackfresse
 0 ich ass
 0 ein ass
+0 auch ass
+0 und kackbratze
+0 geht nutte
+0 musik nutte
+0 die arschgeige
+0 musik kackbratze
+0 musik arschgeige
+0 ein bimbo
+0 sind bimbo0
+0 musst bonze
+0 donutten kackbratze
+0 musik arschgesicht
+0 beine nutte
+0 erkennt arschgesicht
+0 halt asshole
+0 find bimbo
+0 wieder asshole
+0 schimpfen bimbo
+0 aus ass
+0 englisch asshole
+0 niko nutte
+0 dumme nutte
+0 spricht arschgesicht
