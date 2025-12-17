@@ -4,6 +4,29 @@ Measures accuracy, specificity and sensitivity.
 
 Our goal is to have a sensitivity of 1 since false-positives are our
 nemesis. But it would be good to have a specificity > 0.5 as well :)
+
+Some notes:
+- at first we tried using very abstract methods like cologne phonetics,
+  soundex, metaphone, ... (via the phonetics and cologne_phonetics)
+  packages. This was working OK but is not very granular since graphemes
+  are mapped rather broadly to respective classes. Paired with an edit
+  distance and you get difference of 1 between possitive matches as well
+  as negative matches. Thresholding becomes very hard.
+
+- to mitigate the granularity we use `g2p_de`, a grapheme to phoneme mapper
+  employing a lexicon as well as a GRU. having phonemes we can create a
+  similarity matrix phoneme -> phoneme and use that for our similarity score.
+  this is much more granular and we can threshold so that specificity is OK
+  and sensitivity is 1. since the similarity matrix is created from features
+  and code written bei an LLM it is likely that it contains quite a few
+  errors but it is OK for now.
+
+- since g2p_de utilizes a GRU to encode the word and map it to phonemes, we
+  can take the encoded hidden state of two words and compute a similarity
+  between them. this seems to work quite well and seems to have (no real
+  word testing yet) to have a higher specificity than the phoneme similarity
+  matrix approach. it should also be less expensive computationally.
+
 """
 
 import itertools
@@ -138,10 +161,47 @@ words_to_correct = {
     "bitcoin": 0.36,
 }
 
+# for g2p embedding sim
+_words_to_correct = {
+    "nutte": 0.24,
+    "cyber": 0.28,
+    "kackbratze": 0.20,
+    "hackfresse": 0.30,
+    "fotze": 0.24,
+    "arschgeige": 0.23,
+    "arschgesicht": 0.28,
+    "ass": 0.02,
+    "bimbo": 0.26,
+    "bonze": 0.20,
+    "asshole": 0.30,
+    "crypto": 0.20,
+    "bitcoin": 0.33,
+}
+
+
+def g2p_embedding_compare(word1, word2):
+    def get_hidden(word):
+        enc = g2p.encode(word)
+        enc = g2p.gru(enc, len(word) + 1, g2p.enc_w_ih, g2p.enc_w_hh,
+                       g2p.enc_b_ih, g2p.enc_b_hh, h0=np.zeros((1, g2p.enc_w_hh.shape[-1]), np.float32))
+        return enc[:, -1, :]
+
+    h1 = get_hidden(word1) / len(word1)
+    h2 = get_hidden(word2) / len(word2)
+
+    m1 = np.sqrt((h1 ** 2).sum())
+    m2 = np.sqrt((h2 ** 2).sum())
+
+    return 1 - ((h1 * h2).sum() / (m1 * m2))
+
+
 
 def compare(word1, word2, weight):
     if word2 not in words_to_correct:
         return 100, ['word not in correct list']
+
+    # 78% acc, 46% sens., 100% spec. - promising!
+    #return g2p_embedding_compare(word1, word2), []
 
     code1 = cologne_encode(word1)
     code2 = cologne_encode(word2)
