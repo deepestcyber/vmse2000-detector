@@ -15,6 +15,7 @@ bitcoin
 blockchain
 blyat
 bonze
+bonzig
 bratze
 clown
 crypto

@@ -35,14 +35,17 @@ g2p = G2p()
 WORDS_TO_CORRECT = {
     "nutte": 0.20,
     "cyber": 0.13,
-    "kackbratze": 0.50,
+    "kackbratze": 0.20,
+    "hackfresse": 0.30,
     "fotze": 0.15,
-    "arschgeige": 0.51,
+    "arschgeige": 0.43,
     "arschgesicht": 0.42,
     "ass": 0.02,
-    "bimbo": 0.397,
-    "bonze": 0.40,
-    "asshole": 0.49,
+    "bimbo": 0.26,
+    "bonze": 0.18,
+    "asshole": 0.32,
+    "crypto": 0.20,
+    "bitcoin": 0.36,
 }
 
 
