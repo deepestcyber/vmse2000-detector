@@ -1,0 +1,82 @@
+pcm.!default {
+  type asym
+  playback.pcm {
+    type plug
+    slave.pcm "output"
+  }
+  capture.pcm {
+    type plug
+    slave.pcm "input"
+  }
+}
+
+pcm.output {
+  type hw
+  card 0
+}
+
+ctl.!default {
+  type hw
+  card 0
+}
+
+pcm_slave.sl3 {
+	pcm "hw:CARD=Set"
+	format S16_LE
+	channels 1
+	rate 44100
+}
+
+pcm.complex_convert {
+	type plug
+	slave sl3
+}
+
+
+
+pcm.ps3eye_mono {
+    type route
+    slave {
+        pcm "hw:CARD=CameraB409241,DEV=0"
+        channels 4
+    }
+
+    # Average all 4 channels into mono
+    ttable {
+        0.0 0.30
+        0.1 0.30
+        0.2 0.20
+        0.3 0.20
+    }
+}
+
+
+# --- Apply software gain ---
+#
+# Note that these controls are created lazily! So when setting
+# up for the first time, make sure to run `arecord -D ps3eye /dev/null`
+# before.
+#
+# After that you can control the capture volume via the "Master" control.
+# You can get the control id by running 
+#
+# $ amixer -c CameraB409241 controls
+# numid=3,iface=MIXER,name='Master'
+# numid=2,iface=MIXER,name='Mic Capture Volume'
+# numid=1,iface=PCM,name='Capture Channel Map'
+#
+# Set the softvol by running
+#
+# $ amixer -c CameraB409241 cset numid=3 255
+pcm.ps3eye {
+    type softvol
+    slave.pcm "ps3eye_mono"
+
+    control {
+        name "Master"
+        card "CameraB409241"
+    }
+
+    min_dB -5.0
+    max_dB 30.0
+}

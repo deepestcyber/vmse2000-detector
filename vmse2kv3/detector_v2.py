@@ -308,8 +308,8 @@ class SwearWordDetector:
 def _main():
     parser = argparse.ArgumentParser(description="", allow_abbrev=True)
     parser.add_argument('-m', '--model', default='tiny.en', type=str, help="Whisper.cpp model, default to %(default)s")
-    parser.add_argument('-ind', '--input_device', type=int, default=None,
-                        help=f'Id of The input device (aka microphone)\n'
+    parser.add_argument('-ind', '--input_device', type=str, default=None,
+                        help=f'Id/name of The input device (aka microphone)\n'
                              f'available devices {SwearWordDetector.available_devices()}')
     parser.add_argument('-bd', '--block_duration', default=150, type=int,
                         help=f"minimum time audio updates in ms, default to %(default)s")
@@ -320,6 +320,9 @@ def _main():
                             "Audio context window size. Lower is faster. Note for OpenVINO: Must be supported "
                             "by the model. Use the custom OpenVINO conversion script in ./scripts/ to build "
                             "a model that supports lower audio contexts."),
+    )
+    parser.add_argument('--list-devices', action='store_true',
+        help="List available capture devices and their indices and exit.",
     )
     parser.add_argument('--phoneme-correction-threshold', type=float, default=1.0,
         help=(
@@ -350,6 +353,11 @@ def _main():
     )
 
     args = parser.parse_args()
+
+    if args.list_devices:
+        for dev in sd.query_devices():
+            print(dev)
+        return
 
     swear_words = [n.strip() for n in args.word_list]
 

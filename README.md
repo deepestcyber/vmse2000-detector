@@ -161,6 +161,14 @@ whisper.cpp's behavior regarding decoder loops: the threshold for
 detecting loops is quite high at the moment, we could reduce that but
 that would entail recompilation.
 
+### Recording volume tuning
+
+This project is using the PS3 EyeCam for audio recording which sadly doesn't
+seem to expose a recording volume control (at least for ALSA). We can use
+the `softvol` ALSA device type, though. A suitable `.asoundrc` including
+documentation on how to setup (in the comments of that file) can be found in
+[`./vmsev2k3/assets/asoundrc`](./vmsev2k3/assets/asoundrc).
+
 ## Debugging
 
 In case you want to debug whisper.cpp through `pywhispercpp` you have to
