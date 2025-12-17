@@ -183,7 +183,7 @@ class SwearWordDetector:
             return
 
         # collected tokens over all segments
-        all_tokens = []
+        merged_tokens = []
 
         # decoder segments contain a bunch of tokens
         for segment in range(start, n_segments):
@@ -221,17 +221,17 @@ class SwearWordDetector:
                 # this token is not mergeable so
                 # - merging of the previous token is done
                 # - merging of possible future tokens begins now
-                all_tokens.append(merge_tokens(merge_token))
+                merged_tokens.append(merge_tokens(merge_token))
                 merge_token = ([token], [token_data.p])
 
 
             # collect leftover merge tokens so they get processed as well.
             if merge_token:
-                all_tokens.append(merge_tokens(merge_token))
+                merged_tokens.append(merge_tokens(merge_token))
 
             # check individual tokens for phonetic similarity with swear
             # words if their probability is low.
-            for token, proba in all_tokens:
+            for token, proba in merged_tokens:
                 if proba >= self.phoneme_invocation_threshold:
                     continue
 
@@ -245,11 +245,15 @@ class SwearWordDetector:
                 found_match = False
 
                 for swear_word, threshold in WORDS_TO_CORRECT.items():
+                    # exclude the case of self-similarity to not double report
+                    if token.strip().lower() == swear_word:
+                        continue
+
                     score, trace = compare_phonemes(token, swear_word)
                     if score < threshold:
                         print(f"{token} (p={proba}) => {swear_word} because of phonemes! ({score})")
                         print(trace)
-                        all_tokens.append((swear_word, 1 - score))
+                        merged_tokens.append((swear_word, 1 - score))
                         found_match = True
                         break
 
@@ -257,7 +261,7 @@ class SwearWordDetector:
                     break
 
             # final processing of tokens
-            self.process_merged_tokens(all_tokens)
+            self.process_merged_tokens(merged_tokens)
 
     def transcription_process(self, *args, **kwargs):
         while True:
